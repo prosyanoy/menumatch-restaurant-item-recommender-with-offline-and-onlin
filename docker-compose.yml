@@ -1,0 +1,37 @@
+# S3 mock (moto server) + one-shot pipeline run + API.  `docker compose up --build`
+x-env: &env
+  MENUMATCH_STORE: s3
+  MENUMATCH_S3_ENDPOINT: http://s3:5000
+  MENUMATCH_S3_BUCKET: menumatch-artifacts
+  AWS_ACCESS_KEY_ID: test          # dummy values for moto, not real credentials
+  AWS_SECRET_ACCESS_KEY: test
+  AWS_DEFAULT_REGION: us-east-1
+  MENUMATCH_DATA_DIR: /data
+
+services:
+  s3:
+    image: motoserver/moto:latest
+    command: ["-H", "0.0.0.0", "-p", "5000"]
+    ports: ["5000:5000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/moto-api/')"]
+      interval: 3s
+      retries: 20
+
+  pipeline:
+    build: .
+    command: ["python", "-m", "menumatch.cli", "all"]
+    environment: *env
+    volumes: ["pipeline-data:/data"]
+    depends_on:
+      s3: {condition: service_healthy}
+
+  api:
+    build: .
+    environment: *env
+    ports: ["8000:8000"]
+    depends_on:
+      pipeline: {condition: service_completed_successfully}
+
+volumes:
+  pipeline-data:

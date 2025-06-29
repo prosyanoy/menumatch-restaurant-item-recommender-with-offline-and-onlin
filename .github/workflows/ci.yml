@@ -1,0 +1,45 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
+      - name: Unit + integration tests
+        run: pytest
+      - name: Pipeline smoke run
+        env:
+          MENUMATCH_N_DAYS: "30"
+          MENUMATCH_ORDERS_PER_DAY: "80"
+          MENUMATCH_SIM_SESSIONS: "3000"
+        run: python -m menumatch.cli all
+
+  dag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Airflow (pinned constraints)
+        run: |
+          pip install "apache-airflow==3.0.6" pytest \
+            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-3.0.6/constraints-3.12.txt"
+      - name: Validate DAG
+        run: pytest tests/test_dag.py --noconftest
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t menumatch .
